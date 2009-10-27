@@ -3,7 +3,7 @@ NAME
     IPC::Run & Expect
 
 VERSION
-    Version 0.001
+    Version 0.002
 
 SYNOPSIS
         use IPC::RunSession::Simple
@@ -30,6 +30,46 @@ SYNOPSIS
 DESCRIPTION
     A simple IPC session with read/write capability using IPC::Open3 and
     IO::Select
+
+USAGE
+  $session = IPC::RunSession::Simple->open( $cmd )
+    Create a new session by calling "open3" on $cmd
+
+  $result = $session->read( [ $timeout ] )
+    Read (blocking) until some output is gotten
+
+    If $timeout is given, then wait until output is gotten OR the timeout
+    expires (setting $result->expired appropiately)
+
+  $result = $session->read_until( $marker, [ $timeout ] )
+    Read (blocking) until some output matching $marker is gotten
+
+    $marker can either be a regular expression or a code block. If a code
+    block is given, the content accumulated will be available as the first
+    argument and as $_
+
+    If $timeout is given, then wait until output is gotten OR the timeout
+    expires (setting $result->expired appropiately). Any content collected
+    up to the timeout will be included in $result->content
+
+  $session->write( $content )
+    Write $content to the input of the opened process
+
+  $reader = $session->reader
+    Return the reader filehandle (the STDOUT/STDERR of the process)
+
+  $writer = $session->writer
+    Return the writer filehandle (the STDIN of the process)
+
+  $result->content
+    The content read via "read" or "read_until"
+
+  $result->expired
+    True if a read returned as a result of taking longer than the specified
+    timeout value
+
+  $result->closed
+    True if the process closed during the read
 
 SEE ALSO
     IPC::Run

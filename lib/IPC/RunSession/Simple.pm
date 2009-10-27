@@ -9,7 +9,11 @@ IPC::RunSession::Simple - Run a simple IPC session in the same vein as IPC::Run 
 
 =head1 VERSION
 
-Version 0.001
+Version 0.002
+
+=cut
+
+our $VERSION = '0.002';
 
 =head1 SYNOPSIS
 
@@ -40,9 +44,16 @@ A simple IPC session with read/write capability using L<IPC::Open3> and L<IO::Se
 
 =cut
 
-our $VERSION = '0.001';
-
 use IPC::Open3 qw/ open3 /;
+use Carp;
+
+=head1 USAGE
+
+=head2 $session = IPC::RunSession::Simple->open( $cmd )
+
+Create a new session by calling C<open3> on $cmd
+
+=cut
 
 sub open {
     my $class = shift;
@@ -51,9 +62,8 @@ sub open {
     my ( $writer, $reader );
 
     # .., undef, ... means that the output (reader) and error handle will be on the same "stream"
-    # open3 will not return on error... it'll die!
     $cmd = [ $cmd ] unless ref $cmd eq 'ARRAY';
-    open3 $writer, $reader, undef, @$cmd;
+    open3 $writer, $reader, undef, @$cmd or croak "Unable to open3 \"$cmd\": $!";
 
     return IPC::RunSession::Simple::Session->new( writer => $writer, reader => $reader );
 }
@@ -82,12 +92,30 @@ sub _build__selector {
 }
 has _read_amount => qw/is rw/, default => 10_000;
 
+=head2 $result = $session->read( [ $timeout ] )
+
+Read (blocking) until some output is gotten
+
+If $timeout is given, then wait until output is gotten OR the timeout expires (setting $result->expired appropiately)
+
+=cut
+
 sub read {
     my $self = shift;
     my $timeout = shift;
 
     return $self->read_until( undef, $timeout );
 }
+
+=head2 $result = $session->read_until( $marker, [ $timeout ] )
+
+Read (blocking) until some output matching $marker is gotten
+
+$marker can either be a regular expression or a code block. If a code block is given, the content accumulated will be available as the first argument and as C<$_>
+
+If $timeout is given, then wait until output is gotten OR the timeout expires (setting $result->expired appropiately). Any content collected up to the timeout will be included in $result->content
+
+=cut
 
 sub read_until {
     my $self = shift;
@@ -113,6 +141,7 @@ sub read_until {
                     last if $content =~ $marker;
                 }
                 elsif ( ref $marker eq 'CODE' ) {
+                    local $_ = $content;
                     last if $marker->( $content );
                 }
                 else {
@@ -131,6 +160,12 @@ sub read_until {
     return $result;
 }
 
+=head2 $session->write( $content )
+
+Write $content to the input of the opened process
+
+=cut
+
 sub write {
     my $self = shift;
     my $content = shift;
@@ -139,9 +174,33 @@ sub write {
     print $writer $content;
 }
 
+=head2 $reader = $session->reader
+
+Return the reader filehandle (the STDOUT/STDERR of the process)
+
+=head2 $writer = $session->writer
+
+Return the writer filehandle (the STDIN of the process)
+
+=cut
+
 package IPC::RunSession::Simple::Session::Result;
 
 use Any::Moose;
+
+=head2 $result->content
+
+The content read via C<read> or C<read_until>
+
+=head2 $result->expired
+
+True if a read returned as a result of taking longer than the specified timeout value
+
+=head2 $result->closed
+
+True if the process closed during the read
+
+=cut
 
 has [qw/ content closed expired /] => qw/is rw/;
 
